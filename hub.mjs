@@ -68,7 +68,7 @@ async function findPort() {
   }
   if (last && isHub(await fetch(`http://127.0.0.1:${last}/`, { method: "HEAD", signal: AbortSignal.timeout(500) }).catch(() => null))) return last;
   for (const port of [last, ...Array.from({ length: 100 }, (_, i) => FIRST_PORT + i)]) {
-    if (port && !(await portOpen(port))) return port;
+    if (port && (await portFree(port))) return port;
   }
   console.error(`hub: no free port from ${FIRST_PORT} to ${FIRST_PORT + 99} — set HUB_PORT`);
   process.exit(1);
@@ -272,6 +272,18 @@ function portOpen(port) {
     sock.once("connect", () => done(true));
     sock.once("error", () => done(false));
   });
+}
+
+// Free for the hub: it can bind the port, and nothing answers there (on ::1, say). Both
+// count: on WSL with mirrored networking Windows reserves ports nobody listens on, and
+// listen() fails. The bind goes first: it fails at once, a connect there waits out its timeout.
+async function portFree(port) {
+  const bound = await new Promise((resolve) => {
+    const probe = createServer();
+    probe.once("error", () => resolve(false));
+    probe.listen(port, "127.0.0.1", () => probe.close(() => resolve(true)));
+  });
+  return bound && !(await portOpen(port));
 }
 
 // The project's url with {port} and {branch} filled in; null unless it is a web link.
@@ -728,6 +740,11 @@ if (!flags.has("--fg")) {
 }
 
 writeFileSync(SETTINGS, JSON.stringify(CLAUDE_HOOKS, null, 2));
+// ws passes the server's errors on; a pinned HUB_PORT is taken as given, so it can fail here
+wss.on("error", (e) => {
+  console.error(`hub: cannot listen on port ${PORT} (${e.code ?? e.message}) — set HUB_PORT to another`);
+  process.exit(1);
+});
 server.listen(PORT, "127.0.0.1", () => {
   mkdirSync(CONFIG_DIR, { recursive: true });
   writeFileSync(PORT_FILE, String(PORT));
