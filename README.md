@@ -22,13 +22,20 @@ npm link        # puts `hub` on your PATH
 
 ```
 cd your-project
-hub             # serves http://localhost:5190/?p=your-project, in the background
+hub             # serves http://hub.localhost:5190/?p=your-project, in the background
                 # (the next free port if 5190 is taken; it prints the address)
 hub stop        # stops the server; tmux sessions stay
 hub --fg        # serve in the foreground instead
+hub autostart   # start the hub at login from now on; `hub autostart off` not any more
 ```
 
 The background server logs to `~/.config/hub/hub.log`.
+
+`hub.localhost` is this machine and needs no setup: browsers resolve every name under
+`.localhost` to the loopback by themselves (Chrome, Edge, Firefox, Opera; where one
+does not, `localhost` works the same). Once the page has been open, typing `hub` in the
+address bar completes to it. The address without `?p=…` goes back to the project and
+chat that browser had open last.
 
 Run `hub` in another repository while one is running and it is added to the same
 server. Projects are remembered in `~/.config/hub/projects.json`. Each browser tab shows
@@ -72,6 +79,22 @@ are waiting or done.
 - **Clipboard**: a plain drag copies on release; shift+drag then right-click copies
   too; Ctrl+V pastes.
 - **From a terminal**: `tmux -L hub attach -t <session>`.
+
+## Start at login
+
+`hub autostart` makes the hub start when you log in, with the projects it remembers;
+`hub autostart off` takes that back. Neither starts or stops the hub now.
+
+WSL only so far. A distro starts when Windows asks for it, so the entry is on the
+Windows side: a value named `hub` under the user's `Run` registry key, listed with the
+startup apps in Task Manager. It runs `~/.config/hub/autostart.sh` through `wsl.exe`,
+without a window, and that `wsl.exe` stays for as long as the hub runs. The script
+starts the node and the copy of the hub that `hub autostart` was run with, with the
+`HUB_*` variables set at that moment: run `hub autostart` again after either moves
+(a node upgrade under nvm, for one). Output goes to `~/.config/hub/hub.log`.
+
+tmux sessions do not outlive a reboot. Opening a row starts its session again, and
+Claude Code picks up the worktree's last chat (see *Resume*).
 
 ## Project config
 
@@ -134,6 +157,7 @@ other web origin, but another user account on the same machine can reach the por
 
 ## Not yet
 
+- `hub autostart` outside WSL.
 - Status hooks for agents other than Claude Code and Codex CLI.
 - Configurable row metadata.
 - Viewing the `dev` window's output from the page.

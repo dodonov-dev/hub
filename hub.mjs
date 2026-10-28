@@ -6,6 +6,7 @@
 //                    the background unless one is already running
 //   hub --fg [dir]   same, but serve in the foreground
 //   hub stop         stop the background server (tmux sessions stay)
+//   hub autostart    start the hub at login from now on; `hub autostart off` not any more
 //
 //   HUB_PORT=5191        this port and no other (default: the first free one from 5190)
 //   HUB_SOCKET=hubtest   another tmux server (keeps tests off the real sessions)
@@ -27,6 +28,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { WebSocketServer } from "ws";
+import { autostart } from "./autostart.mjs";
 import { withCodexHooks } from "./codex-status.mjs";
 import { CodexRuntime } from "./codex-runtime.mjs";
 
@@ -75,6 +77,10 @@ async function findPort() {
 
 const PORT = await findPort(); // where a hub is running, else where this one will
 const BASE = `http://127.0.0.1:${PORT}`;
+// The page's own name: to a browser anything under .localhost is this machine, with no
+// DNS and no hosts entry behind it (RFC 6761). It is what an address bar completes
+// "hub" to; `localhost` and 127.0.0.1 keep working beside it.
+const NAME = "hub.localhost";
 
 const lib = (spec) => require.resolve(spec);
 const STATIC = {
@@ -354,7 +360,7 @@ async function createWorktree(root, name) {
 
 // ---- http -------------------------------------------------------------------
 
-const ownHost = (h) => [`localhost:${PORT}`, `127.0.0.1:${PORT}`].includes(h);
+const ownHost = (h) => [`${NAME}:${PORT}`, `localhost:${PORT}`, `127.0.0.1:${PORT}`].includes(h);
 function ownOrigin(origin) {
   try {
     return ownHost(new URL(origin).host);
@@ -505,10 +511,10 @@ wss.on("connection", async (ws, req) => {
 
 const args = process.argv.slice(2);
 const flags = new Set(args.filter((a) => a.startsWith("--")));
-const [arg] = args.filter((a) => !a.startsWith("--"));
+const [arg, option] = args.filter((a) => !a.startsWith("--"));
 const call = (route, params = {}) =>
   fetch(`${BASE}${route}`, { method: "POST", body: new URLSearchParams(params), signal: AbortSignal.timeout(500) }).catch(() => null);
-const pageUrl = (r) => `http://localhost:${PORT}/${r ? `?p=${encodeURIComponent(nameOf(r))}` : ""}`;
+const pageUrl = (r) => `http://${NAME}:${PORT}/${r ? `?p=${encodeURIComponent(nameOf(r))}` : ""}`;
 function printStatusHelp() {
   console.log(`status for a claude started outside the hub: restart it with\n  claude --settings ${SETTINGS} --continue`);
   console.log(`Codex status is read automatically from its shared local daemon.\nWithout the daemon, restart Codex with\n  ${withCodexHooks("codex", BASE)} resume --last\nthen review and trust the Hub hooks in /hooks`);
@@ -522,6 +528,20 @@ if (arg === "stop") {
     process.exit(1);
   }
   console.log(res ? "hub stopped" : "hub is not running");
+  process.exit(0);
+}
+
+if (arg === "autostart") {
+  if (![undefined, "on", "off"].includes(option)) {
+    console.error("hub: `hub autostart` or `hub autostart off`");
+    process.exit(1);
+  }
+  try {
+    console.log(`hub: ${autostart(option !== "off", { script: fileURLToPath(import.meta.url), dir: CONFIG_DIR, log: LOG_FILE })}`);
+  } catch (e) {
+    console.error(`hub: ${e.message}`);
+    process.exit(1);
+  }
   process.exit(0);
 }
 

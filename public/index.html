@@ -63,7 +63,11 @@ import { WebLinksAddon } from "/addon-web-links.mjs";
 
 const COLORS = ["#8c2a2a", "#2a5e8c", "#2a8c57", "#8c6d2a"];
 const mainEl = document.getElementById("main");
-const params = new URLSearchParams(location.search);
+// A bare address — typed, or what the address bar makes of "hub" — goes back to where
+// this browser left off.
+let store = null;
+try { store = localStorage; } catch { /* a browser told to keep no site data */ }
+const params = new URLSearchParams(location.search || store?.getItem("last") || "");
 let project = params.get("p");
 let selected = params.get("s");
 const query = () => `?p=${encodeURIComponent(project)}${selected ? `&s=${encodeURIComponent(selected)}` : ""}`;
@@ -132,6 +136,7 @@ function connect(t) {
 function open(session) {
   selected = session;
   history.replaceState(null, "", query());
+  store?.setItem("last", query());
   document.getElementById("empty").hidden = true;
   let t = terms.get(session);
   if (t?.over) { // detached: start over
@@ -313,7 +318,9 @@ mainEl.addEventListener("paste", (e) => {
 
 new ResizeObserver(() => current()?.fit.fit()).observe(mainEl);
 await refresh();
-if (selected) open(selected);
+// the session in the address may be gone by now, its worktree removed
+if ([...rows.children].some((row) => row.dataset.session === selected)) open(selected);
+else selected = null;
 setInterval(refresh, 1500);
 </script>
 </body>
